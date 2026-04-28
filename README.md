@@ -13,6 +13,13 @@ __(.)<
 
 Then it makes fun of your typo in English.
 
+You can inspect the current settings:
+
+```bash
+gut config show
+gut --config show
+```
+
 Animation is off by default, but you can enable a tiny entrance animation:
 
 ```bash
@@ -24,6 +31,7 @@ Disable it again with:
 ```bash
 gut --config animation false
 ```
+
 
 ## Install
 

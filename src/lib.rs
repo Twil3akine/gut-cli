@@ -8,6 +8,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const FRAME_DELAY_MS: u64 = 500;
 const FINAL_HOLD_MS: u64 = 1000;
+const ANIMATION_STEPS: [usize; 3] = [0, 1, 2];
+const FINAL_INDENT: usize = 3;
 
 const MESSAGES: [&str; 6] = [
     "You meant `git`, didn't you? Bold typo.",
@@ -23,12 +25,16 @@ __(.)<
 /___)
  " ""#;
 
-const ANIMATION_STEPS: [usize; 3] = [0, 1, 2];
-const FINAL_INDENT: usize = 3;
-
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct Config {
     animation: bool,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum Command {
+    Run,
+    ShowConfig,
+    SetAnimation(bool),
 }
 
 pub fn run_cli<I>(args: I) -> ExitCode
@@ -40,9 +46,15 @@ where
             run();
             ExitCode::SUCCESS
         }
-        Ok(Command::SetAnimation(enabled)) => match store_animation_setting(enabled) {
-            Ok(path) => {
-                println!("Saved animation={enabled} to {}", path.display());
+        Ok(Command::ShowConfig) => {
+            let config = load_config().unwrap_or_default();
+            print!("{}", format_config(config));
+            ExitCode::SUCCESS
+        }
+        Ok(Command::SetAnimation(enabled)) => match update_animation(enabled) {
+            Ok((config, path)) => {
+                println!("Saved config to {}", path.display());
+                print!("{}", format_config(config));
                 ExitCode::SUCCESS
             }
             Err(error) => {
@@ -74,12 +86,6 @@ pub fn run() {
     println!("{}", render_spoken_frame(FINAL_INDENT, message));
 }
 
-#[derive(Debug, Eq, PartialEq)]
-enum Command {
-    Run,
-    SetAnimation(bool),
-}
-
 fn parse_command<I>(args: I) -> Result<Command, String>
 where
     I: IntoIterator<Item = String>,
@@ -88,17 +94,21 @@ where
 
     match collected.as_slice() {
         [_bin] => Ok(Command::Run),
+        [_bin, config, show] if config == "config" && show == "show" => Ok(Command::ShowConfig),
+        [_bin, flag, show] if flag == "--config" && show == "show" => Ok(Command::ShowConfig),
         [_bin, flag, key, value] if flag == "--config" => {
             if key != "animation" {
-                return Err(format!(
-                    "Unknown config key `{key}`. Supported keys: animation"
-                ));
+                return Err(
+                    "Unknown config key. Supported keys: animation".to_string(),
+                );
             }
 
-            let enabled = parse_bool(value)?;
-            Ok(Command::SetAnimation(enabled))
+            Ok(Command::SetAnimation(parse_bool(value)?))
         }
-        [_bin, ..] => Err("Usage: gut [--config animation true|false]".to_string()),
+        [_bin, ..] => Err(
+            "Usage: gut [config show] [--config show] [--config animation true|false]"
+                .to_string(),
+        ),
         [] => Ok(Command::Run),
     }
 }
@@ -143,16 +153,17 @@ fn parse_config(contents: &str) -> Config {
     config
 }
 
-fn store_animation_setting(enabled: bool) -> io::Result<PathBuf> {
+fn update_animation(enabled: bool) -> io::Result<(Config, PathBuf)> {
+    let config = Config { animation: enabled };
     let path = config_path()?;
     let parent = path
         .parent()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Invalid config path"))?;
+        .ok_or_else(|| io::Error::other("Invalid config path"))?;
 
     fs::create_dir_all(parent)?;
     fs::write(&path, format!("animation={enabled}\n"))?;
 
-    Ok(path)
+    Ok((config, path))
 }
 
 fn config_path() -> io::Result<PathBuf> {
@@ -164,6 +175,10 @@ fn config_path() -> io::Result<PathBuf> {
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "HOME is not set"))?;
 
     Ok(Path::new(&home).join(".config").join("gut").join("config"))
+}
+
+fn format_config(config: Config) -> String {
+    format!("animation = {}\n", config.animation)
 }
 
 fn print_animated_goose(message: &str) {
@@ -231,10 +246,10 @@ fn render_spoken_frame(indent: usize, message: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{indent_text, parse_command, parse_config, render_spoken_frame, Command, Config};
+    use super::{format_config, indent_text, parse_command, parse_config, render_spoken_frame, Command, Config};
 
     #[test]
-    fn parses_config_command() {
+    fn parses_animation_config_command() {
         let command = parse_command([
             "gut".to_string(),
             "--config".to_string(),
@@ -247,16 +262,11 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unknown_config_key() {
-        let error = parse_command([
-            "gut".to_string(),
-            "--config".to_string(),
-            "speed".to_string(),
-            "true".to_string(),
-        ])
-        .unwrap_err();
+    fn parses_show_config_command() {
+        let command =
+            parse_command(["gut".to_string(), "config".to_string(), "show".to_string()]).unwrap();
 
-        assert!(error.contains("Unknown config key"));
+        assert_eq!(command, Command::ShowConfig);
     }
 
     #[test]
@@ -267,6 +277,13 @@ mod tests {
     }
 
     #[test]
+    fn formats_current_config() {
+        let output = format_config(Config { animation: true });
+
+        assert_eq!(output, "animation = true\n");
+    }
+
+    #[test]
     fn indents_every_line_of_goose() {
         let indented = indent_text("a\nb", 2);
 
@@ -274,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn renders_spoken_frame_with_bubble() {
+    fn renders_spoken_frame_with_message() {
         let frame = render_spoken_frame(1, "honk");
 
         assert!(frame.contains("< honk"));
