@@ -1,0 +1,18 @@
+[package]
+name = "gut"
+version = "0.1.0"
+edition = "2021"
+description = "A tiny goose that roasts your git typo."
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/Twil3akine/gut"
+homepage = "https://github.com/Twil3akine/gut"
+documentation = "https://docs.rs/gut"
+
+[lib]
+name = "gut"
+path = "src/lib.rs"
+
+[[bin]]
+name = "gut"
+path = "src/main.rs"
