@@ -13,6 +13,41 @@ __(.)<
 
 Then it makes fun of your typo in English or Japanese.
 
+The mascot and message style are configurable:
+
+- `animation`: enable or disable the entrance animation
+- `language`: switch between English and Japanese roast messages
+- `character`: choose `goose`, `duck`, `owl`, or `random`
+
+Available characters:
+
+### goose
+
+```text
+ _
+__(.)<
+/___)
+ " "
+```
+
+### duck
+
+```text
+       __
+  ___( o)>
+  \ <_. )
+   `---'
+```
+
+### owl
+
+```text
+ ,___,
+ [O,O]
+ /)__)
+/--"-"
+```
+
 You can inspect the current settings:
 
 ```bash
@@ -45,7 +80,10 @@ Switch the character:
 gut --config character goose
 gut --config character duck
 gut --config character owl
+gut --config character random
 ```
+
+When `character=random`, `gut` picks `goose`, `duck`, or `owl` on each run.
 
 
 ## Install

@@ -45,6 +45,8 @@ const OWL: &str = r#" ,___,
  /)__)
 /--"-""#;
 
+const RANDOM_CHARACTERS: [Character; 3] = [Character::Goose, Character::Duck, Character::Owl];
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Language {
     En,
@@ -81,6 +83,7 @@ enum Character {
     Goose,
     Duck,
     Owl,
+    Random,
 }
 
 impl Default for Character {
@@ -95,8 +98,9 @@ impl Character {
             "goose" => Ok(Self::Goose),
             "duck" => Ok(Self::Duck),
             "owl" => Ok(Self::Owl),
+            "random" => Ok(Self::Random),
             _ => Err(format!(
-                "Invalid character `{value}`. Use `goose`, `duck`, or `owl`."
+                "Invalid character `{value}`. Use `goose`, `duck`, `owl`, or `random`."
             )),
         }
     }
@@ -106,6 +110,14 @@ impl Character {
             Self::Goose => GOOSE,
             Self::Duck => DUCK,
             Self::Owl => OWL,
+            Self::Random => unreachable!("random must be resolved before rendering"),
+        }
+    }
+
+    fn resolve(self, seed: usize) -> Self {
+        match self {
+            Self::Random => RANDOM_CHARACTERS[seed % RANDOM_CHARACTERS.len()],
+            concrete => concrete,
         }
     }
 }
@@ -116,6 +128,7 @@ impl fmt::Display for Character {
             Self::Goose => write!(f, "goose"),
             Self::Duck => write!(f, "duck"),
             Self::Owl => write!(f, "owl"),
+            Self::Random => write!(f, "random"),
         }
     }
 }
@@ -175,8 +188,9 @@ where
 
 pub fn run() {
     let config = load_config().unwrap_or_default();
-    let message = choose_message(config.language);
-    let character = config.character.art();
+    let seed = random_seed();
+    let message = choose_message(config.language, seed);
+    let character = config.character.resolve(seed).art();
 
     if config.animation && io::stdout().is_terminal() {
         print_animated_character(character, message);
@@ -186,18 +200,20 @@ pub fn run() {
     println!("{}", render_spoken_frame(FINAL_INDENT, character, message));
 }
 
-fn choose_message(language: Language) -> &'static str {
-    let now = SystemTime::now()
+fn random_seed() -> usize {
+    SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.subsec_nanos() as usize)
-        .unwrap_or(0);
+        .unwrap_or(0)
+}
 
+fn choose_message(language: Language, seed: usize) -> &'static str {
     let pool = match language {
         Language::En => &EN_MESSAGES,
         Language::Ja => &JA_MESSAGES,
     };
 
-    pool[now % pool.len()]
+    pool[seed % pool.len()]
 }
 
 fn parse_command<I>(args: I) -> Result<Command, String>
@@ -214,7 +230,7 @@ where
             Ok(Command::UpdateConfig(parse_config_update(key, value)?))
         }
         [_bin, ..] => Err(
-            "Usage: gut [config show] [--config show] [--config animation true|false] [--config language en|ja] [--config character goose|duck|owl]"
+            "Usage: gut [config show] [--config show] [--config animation true|false] [--config language en|ja] [--config character goose|duck|owl|random]"
                 .to_string(),
         ),
         [] => Ok(Command::Run),
@@ -429,14 +445,14 @@ mod tests {
 
     #[test]
     fn parses_language_and_character_from_config_file() {
-        let config = parse_config("animation=true\nlanguage=ja\ncharacter=owl\n");
+        let config = parse_config("animation=true\nlanguage=ja\ncharacter=random\n");
 
         assert_eq!(
             config,
             Config {
                 animation: true,
                 language: Language::Ja,
-                character: Character::Owl,
+                character: Character::Random,
             }
         );
     }
@@ -464,5 +480,13 @@ mod tests {
         let frame = render_spoken_frame(1, "a\nb", "honk");
 
         assert!(frame.contains("b  < honk"));
+    }
+
+    #[test]
+    fn resolves_random_character_from_seed() {
+        assert_eq!(Character::Random.resolve(0), Character::Goose);
+        assert_eq!(Character::Random.resolve(1), Character::Duck);
+        assert_eq!(Character::Random.resolve(2), Character::Owl);
+        assert_eq!(Character::Random.resolve(3), Character::Goose);
     }
 }
