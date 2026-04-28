@@ -1,6 +1,6 @@
-# gut
+# gut-cli
 
-`gut` is a tiny joke CLI for people who type `gut` when they meant `git`.
+`gut-cli` is a tiny joke CLI for people who type `gut` when they meant `git`.
 
 It prints a small goose:
 
@@ -24,7 +24,7 @@ cargo install --path .
 ### From crates.io
 
 ```bash
-cargo install gut
+cargo install gut-cli
 ```
 
 ## Run

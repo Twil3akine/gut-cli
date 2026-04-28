@@ -1,13 +1,13 @@
 [package]
-name = "gut"
+name = "gut-cli"
 version = "0.1.0"
 edition = "2021"
 description = "A tiny goose that roasts your git typo."
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/Twil3akine/gut"
-homepage = "https://github.com/Twil3akine/gut"
-documentation = "https://docs.rs/gut"
+repository = "https://github.com/Twil3akine/gut-cli"
+homepage = "https://github.com/Twil3akine/gut-cli"
+documentation = "https://docs.rs/gut-cli"
 
 [lib]
 name = "gut"
