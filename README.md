@@ -39,6 +39,14 @@ gut --config language en
 gut --config language ja
 ```
 
+Switch the character:
+
+```bash
+gut --config character goose
+gut --config character duck
+gut --config character owl
+```
+
 
 ## Install
 

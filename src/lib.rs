@@ -35,6 +35,16 @@ __(.)<
 /___)
  " ""#;
 
+const DUCK: &str = r#"       __
+  ___( o)>
+  \ <_. )
+   `---'"#;
+
+const OWL: &str = r#" ,___,
+ [O,O]
+ /)__)
+/--"-""#;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Language {
     En,
@@ -66,16 +76,62 @@ impl fmt::Display for Language {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Character {
+    Goose,
+    Duck,
+    Owl,
+}
+
+impl Default for Character {
+    fn default() -> Self {
+        Self::Goose
+    }
+}
+
+impl Character {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "goose" => Ok(Self::Goose),
+            "duck" => Ok(Self::Duck),
+            "owl" => Ok(Self::Owl),
+            _ => Err(format!(
+                "Invalid character `{value}`. Use `goose`, `duck`, or `owl`."
+            )),
+        }
+    }
+
+    fn art(self) -> &'static str {
+        match self {
+            Self::Goose => GOOSE,
+            Self::Duck => DUCK,
+            Self::Owl => OWL,
+        }
+    }
+}
+
+impl fmt::Display for Character {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Goose => write!(f, "goose"),
+            Self::Duck => write!(f, "duck"),
+            Self::Owl => write!(f, "owl"),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct Config {
     animation: bool,
     language: Language,
+    character: Character,
 }
 
 #[derive(Debug, Eq, PartialEq)]
 enum ConfigUpdate {
     Animation(bool),
     Language(Language),
+    Character(Character),
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -120,13 +176,14 @@ where
 pub fn run() {
     let config = load_config().unwrap_or_default();
     let message = choose_message(config.language);
+    let character = config.character.art();
 
     if config.animation && io::stdout().is_terminal() {
-        print_animated_goose(message);
+        print_animated_character(character, message);
         return;
     }
 
-    println!("{}", render_spoken_frame(FINAL_INDENT, message));
+    println!("{}", render_spoken_frame(FINAL_INDENT, character, message));
 }
 
 fn choose_message(language: Language) -> &'static str {
@@ -157,7 +214,7 @@ where
             Ok(Command::UpdateConfig(parse_config_update(key, value)?))
         }
         [_bin, ..] => Err(
-            "Usage: gut [config show] [--config show] [--config animation true|false] [--config language en|ja]"
+            "Usage: gut [config show] [--config show] [--config animation true|false] [--config language en|ja] [--config character goose|duck|owl]"
                 .to_string(),
         ),
         [] => Ok(Command::Run),
@@ -168,7 +225,11 @@ fn parse_config_update(key: &str, value: &str) -> Result<ConfigUpdate, String> {
     match key {
         "animation" => Ok(ConfigUpdate::Animation(parse_bool(value)?)),
         "language" => Ok(ConfigUpdate::Language(Language::parse(value)?)),
-        _ => Err("Unknown config key. Supported keys: animation, language".to_string()),
+        "character" => Ok(ConfigUpdate::Character(Character::parse(value)?)),
+        _ => Err(
+            "Unknown config key. Supported keys: animation, language, character"
+                .to_string(),
+        ),
     }
 }
 
@@ -213,6 +274,11 @@ fn parse_config(contents: &str) -> Config {
                     config.language = language;
                 }
             }
+            "character" => {
+                if let Ok(character) = Character::parse(value) {
+                    config.character = character;
+                }
+            }
             _ => {}
         }
     }
@@ -226,6 +292,7 @@ fn update_config(update: ConfigUpdate) -> io::Result<(Config, PathBuf)> {
     match update {
         ConfigUpdate::Animation(enabled) => config.animation = enabled,
         ConfigUpdate::Language(language) => config.language = language,
+        ConfigUpdate::Character(character) => config.character = character,
     }
 
     let path = config_path()?;
@@ -237,8 +304,8 @@ fn update_config(update: ConfigUpdate) -> io::Result<(Config, PathBuf)> {
     fs::write(
         &path,
         format!(
-            "animation={}\nlanguage={}\n",
-            config.animation, config.language
+            "animation={}\nlanguage={}\ncharacter={}\n",
+            config.animation, config.language, config.character
         ),
     )?;
 
@@ -258,17 +325,17 @@ fn config_path() -> io::Result<PathBuf> {
 
 fn format_config(config: Config) -> String {
     format!(
-        "animation = {}\nlanguage = {}\n",
-        config.animation, config.language
+        "animation = {}\nlanguage = {}\ncharacter = {}\n",
+        config.animation, config.language, config.character
     )
 }
 
-fn print_animated_goose(message: &str) {
+fn print_animated_character(character: &str, message: &str) {
     let mut stdout = io::stdout();
     let mut previous_lines = 0;
 
     for indent in ANIMATION_STEPS {
-        let frame = indent_text(GOOSE, indent);
+        let frame = indent_text(character, indent);
         clear_previous_frame(&mut stdout, previous_lines);
         let _ = writeln!(stdout, "{frame}");
         let _ = stdout.flush();
@@ -276,14 +343,14 @@ fn print_animated_goose(message: &str) {
         thread::sleep(Duration::from_millis(FRAME_DELAY_MS));
     }
 
-    let final_frame = indent_text(GOOSE, FINAL_INDENT);
+    let final_frame = indent_text(character, FINAL_INDENT);
     clear_previous_frame(&mut stdout, previous_lines);
     let _ = writeln!(stdout, "{final_frame}");
     let _ = stdout.flush();
     thread::sleep(Duration::from_millis(FRAME_DELAY_MS));
 
     clear_previous_frame(&mut stdout, count_lines(&final_frame));
-    let spoken_frame = render_spoken_frame(FINAL_INDENT, message);
+    let spoken_frame = render_spoken_frame(FINAL_INDENT, character, message);
     let _ = writeln!(stdout, "{spoken_frame}");
     let _ = stdout.flush();
     thread::sleep(Duration::from_millis(FINAL_HOLD_MS));
@@ -310,27 +377,33 @@ fn indent_text(text: &str, indent: usize) -> String {
         .join("\n")
 }
 
-fn render_spoken_frame(indent: usize, message: &str) -> String {
-    let goose_lines: Vec<String> = indent_text(GOOSE, indent)
+fn render_spoken_frame(indent: usize, character: &str, message: &str) -> String {
+    let lines: Vec<String> = indent_text(character, indent)
         .lines()
         .map(str::to_string)
         .collect();
     let gap = "  ";
+    let speech_line = if lines.len() > 1 { 1 } else { 0 };
 
-    vec![
-        goose_lines[0].clone(),
-        format!("{}{}< {}", goose_lines[1], gap, message),
-        goose_lines[2].clone(),
-        goose_lines[3].clone(),
-    ]
-    .join("\n")
+    lines
+        .into_iter()
+        .enumerate()
+        .map(|(index, line)| {
+            if index == speech_line {
+                format!("{line}{gap}< {message}")
+            } else {
+                line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        format_config, indent_text, parse_command, parse_config, render_spoken_frame, Command,
-        Config, ConfigUpdate, Language,
+        format_config, indent_text, parse_command, parse_config, render_spoken_frame, Character,
+        Command, Config, ConfigUpdate, Language,
     };
 
     #[test]
@@ -355,14 +428,15 @@ mod tests {
     }
 
     #[test]
-    fn parses_language_from_config_file() {
-        let config = parse_config("animation=true\nlanguage=ja\n");
+    fn parses_language_and_character_from_config_file() {
+        let config = parse_config("animation=true\nlanguage=ja\ncharacter=owl\n");
 
         assert_eq!(
             config,
             Config {
                 animation: true,
                 language: Language::Ja,
+                character: Character::Owl,
             }
         );
     }
@@ -372,13 +446,14 @@ mod tests {
         let output = format_config(Config {
             animation: true,
             language: Language::Ja,
+            character: Character::Duck,
         });
 
-        assert_eq!(output, "animation = true\nlanguage = ja\n");
+        assert_eq!(output, "animation = true\nlanguage = ja\ncharacter = duck\n");
     }
 
     #[test]
-    fn indents_every_line_of_goose() {
+    fn indents_every_line_of_character() {
         let indented = indent_text("a\nb", 2);
 
         assert_eq!(indented, "  a\n  b");
@@ -386,8 +461,8 @@ mod tests {
 
     #[test]
     fn renders_spoken_frame_with_message() {
-        let frame = render_spoken_frame(1, "honk");
+        let frame = render_spoken_frame(1, "a\nb", "honk");
 
-        assert!(frame.contains("< honk"));
+        assert!(frame.contains("b  < honk"));
     }
 }
