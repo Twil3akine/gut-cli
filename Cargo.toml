@@ -1,6 +1,6 @@
 [package]
 name = "gut-cli"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A tiny goose that roasts your git typo."
 license = "MIT"
@@ -10,7 +10,7 @@ homepage = "https://github.com/Twil3akine/gut-cli"
 documentation = "https://docs.rs/gut-cli"
 
 [lib]
-name = "gut"
+name = "gut_cli"
 path = "src/lib.rs"
 
 [[bin]]
