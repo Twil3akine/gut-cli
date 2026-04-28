@@ -84,6 +84,7 @@ gut --config character random
 ```
 
 When `character=random`, `gut` picks `goose`, `duck`, or `owl` on each run.
+Message selection is randomized independently from character selection.
 
 
 ## Install

@@ -1,6 +1,6 @@
 [package]
 name = "gut-cli"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2021"
 description = "A tiny goose that roasts your git typo."
 license = "MIT"

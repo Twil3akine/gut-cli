@@ -11,6 +11,8 @@ const FRAME_DELAY_MS: u64 = 500;
 const FINAL_HOLD_MS: u64 = 1000;
 const ANIMATION_STEPS: [usize; 3] = [0, 1, 2];
 const FINAL_INDENT: usize = 3;
+const MESSAGE_SALT: u64 = 0x9E37_79B9_7F4A_7C15;
+const CHARACTER_SALT: u64 = 0xBF58_476D_1CE4_E5B9;
 
 const EN_MESSAGES: [&str; 6] = [
     "You meant `git`, didn't you? Bold typo.",
@@ -30,15 +32,15 @@ const JA_MESSAGES: [&str; 6] = [
     "`git` を 1 文字で外しました。印象には残ります。",
 ];
 
-const GOOSE: &str = r#" _
+const GOOSE: &str = r#"   _
 __(.)<
 /___)
  " ""#;
 
-const DUCK: &str = r#"       __
-  ___( o)>
-  \ <_. )
-   `---'"#;
+const DUCK: &str = r#"    __
+___( o)>
+\ <_. )
+ `---'"#;
 
 const OWL: &str = r#" ,___,
  [O,O]
@@ -188,9 +190,12 @@ where
 
 pub fn run() {
     let config = load_config().unwrap_or_default();
-    let seed = random_seed();
-    let message = choose_message(config.language, seed);
-    let character = config.character.resolve(seed).art();
+    let base_seed = random_seed();
+    let message = choose_message(config.language, message_index(base_seed));
+    let character = config
+        .character
+        .resolve(character_index(base_seed))
+        .art();
 
     if config.animation && io::stdout().is_terminal() {
         print_animated_character(character, message);
@@ -203,7 +208,7 @@ pub fn run() {
 fn random_seed() -> usize {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.subsec_nanos() as usize)
+        .map(|duration| duration.as_nanos() as usize)
         .unwrap_or(0)
 }
 
@@ -214,6 +219,23 @@ fn choose_message(language: Language, seed: usize) -> &'static str {
     };
 
     pool[seed % pool.len()]
+}
+
+fn message_index(base_seed: usize) -> usize {
+    mix_seed(base_seed as u64, MESSAGE_SALT) as usize
+}
+
+fn character_index(base_seed: usize) -> usize {
+    mix_seed(base_seed as u64, CHARACTER_SALT) as usize
+}
+
+fn mix_seed(value: u64, salt: u64) -> u64 {
+    let mut x = value ^ salt;
+    x ^= x >> 30;
+    x = x.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x ^= x >> 27;
+    x = x.wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^ (x >> 31)
 }
 
 fn parse_command<I>(args: I) -> Result<Command, String>
@@ -242,10 +264,7 @@ fn parse_config_update(key: &str, value: &str) -> Result<ConfigUpdate, String> {
         "animation" => Ok(ConfigUpdate::Animation(parse_bool(value)?)),
         "language" => Ok(ConfigUpdate::Language(Language::parse(value)?)),
         "character" => Ok(ConfigUpdate::Character(Character::parse(value)?)),
-        _ => Err(
-            "Unknown config key. Supported keys: animation, language, character"
-                .to_string(),
-        ),
+        _ => Err("Unknown config key. Supported keys: animation, language, character".to_string()),
     }
 }
 
@@ -418,8 +437,8 @@ fn render_spoken_frame(indent: usize, character: &str, message: &str) -> String 
 #[cfg(test)]
 mod tests {
     use super::{
-        format_config, indent_text, parse_command, parse_config, render_spoken_frame, Character,
-        Command, Config, ConfigUpdate, Language,
+        character_index, format_config, indent_text, message_index, parse_command, parse_config,
+        render_spoken_frame, Character, Command, Config, ConfigUpdate, Language,
     };
 
     #[test]
@@ -432,7 +451,10 @@ mod tests {
         ])
         .unwrap();
 
-        assert_eq!(command, Command::UpdateConfig(ConfigUpdate::Animation(true)));
+        assert_eq!(
+            command,
+            Command::UpdateConfig(ConfigUpdate::Animation(true))
+        );
     }
 
     #[test]
@@ -465,7 +487,10 @@ mod tests {
             character: Character::Duck,
         });
 
-        assert_eq!(output, "animation = true\nlanguage = ja\ncharacter = duck\n");
+        assert_eq!(
+            output,
+            "animation = true\nlanguage = ja\ncharacter = duck\n"
+        );
     }
 
     #[test]
@@ -488,5 +513,12 @@ mod tests {
         assert_eq!(Character::Random.resolve(1), Character::Duck);
         assert_eq!(Character::Random.resolve(2), Character::Owl);
         assert_eq!(Character::Random.resolve(3), Character::Goose);
+    }
+
+    #[test]
+    fn separates_message_and_character_randomness() {
+        let base_seed = 123456789usize;
+
+        assert_ne!(message_index(base_seed), character_index(base_seed));
     }
 }
