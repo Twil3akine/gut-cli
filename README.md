@@ -11,7 +11,7 @@ __(.)<
  " "
 ```
 
-Then it makes fun of your typo in English.
+Then it makes fun of your typo in English or Japanese.
 
 You can inspect the current settings:
 
@@ -30,6 +30,13 @@ Disable it again with:
 
 ```bash
 gut --config animation false
+```
+
+Switch the roast language:
+
+```bash
+gut --config language en
+gut --config language ja
 ```
 
 

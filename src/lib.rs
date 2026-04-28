@@ -1,4 +1,5 @@
 use std::env;
+use std::fmt;
 use std::fs;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
@@ -11,7 +12,7 @@ const FINAL_HOLD_MS: u64 = 1000;
 const ANIMATION_STEPS: [usize; 3] = [0, 1, 2];
 const FINAL_INDENT: usize = 3;
 
-const MESSAGES: [&str; 6] = [
+const EN_MESSAGES: [&str; 6] = [
     "You meant `git`, didn't you? Bold typo.",
     "Cute try. Still looks a lot like `git` was the plan.",
     "That honk was suspiciously close to `git`.",
@@ -20,21 +21,68 @@ const MESSAGES: [&str; 6] = [
     "Impressive. You missed `git` by one letter.",
 ];
 
+const JA_MESSAGES: [&str; 6] = [
+    "`git` のつもりでしたよね。堂々と `gut` ですね。",
+    "惜しいです。かなり `git` のつもりだった気配があります。",
+    "そのガァガァ、かなり `git` に近いです。",
+    "`gut` を打ちましたが、指は `git` を目指していた気がします。",
+    "自信はありますが、たぶん `git` ではないです。",
+    "`git` を 1 文字で外しました。印象には残ります。",
+];
+
 const GOOSE: &str = r#" _
 __(.)<
 /___)
  " ""#;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Language {
+    En,
+    Ja,
+}
+
+impl Default for Language {
+    fn default() -> Self {
+        Self::En
+    }
+}
+
+impl Language {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "en" => Ok(Self::En),
+            "ja" => Ok(Self::Ja),
+            _ => Err(format!("Invalid language `{value}`. Use `en` or `ja`.")),
+        }
+    }
+}
+
+impl fmt::Display for Language {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::En => write!(f, "en"),
+            Self::Ja => write!(f, "ja"),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct Config {
     animation: bool,
+    language: Language,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum ConfigUpdate {
+    Animation(bool),
+    Language(Language),
 }
 
 #[derive(Debug, Eq, PartialEq)]
 enum Command {
     Run,
     ShowConfig,
-    SetAnimation(bool),
+    UpdateConfig(ConfigUpdate),
 }
 
 pub fn run_cli<I>(args: I) -> ExitCode
@@ -51,7 +99,7 @@ where
             print!("{}", format_config(config));
             ExitCode::SUCCESS
         }
-        Ok(Command::SetAnimation(enabled)) => match update_animation(enabled) {
+        Ok(Command::UpdateConfig(update)) => match update_config(update) {
             Ok((config, path)) => {
                 println!("Saved config to {}", path.display());
                 print!("{}", format_config(config));
@@ -70,13 +118,8 @@ where
 }
 
 pub fn run() {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.subsec_nanos() as usize)
-        .unwrap_or(0);
-
-    let message = MESSAGES[now % MESSAGES.len()];
     let config = load_config().unwrap_or_default();
+    let message = choose_message(config.language);
 
     if config.animation && io::stdout().is_terminal() {
         print_animated_goose(message);
@@ -84,6 +127,20 @@ pub fn run() {
     }
 
     println!("{}", render_spoken_frame(FINAL_INDENT, message));
+}
+
+fn choose_message(language: Language) -> &'static str {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.subsec_nanos() as usize)
+        .unwrap_or(0);
+
+    let pool = match language {
+        Language::En => &EN_MESSAGES,
+        Language::Ja => &JA_MESSAGES,
+    };
+
+    pool[now % pool.len()]
 }
 
 fn parse_command<I>(args: I) -> Result<Command, String>
@@ -97,19 +154,21 @@ where
         [_bin, config, show] if config == "config" && show == "show" => Ok(Command::ShowConfig),
         [_bin, flag, show] if flag == "--config" && show == "show" => Ok(Command::ShowConfig),
         [_bin, flag, key, value] if flag == "--config" => {
-            if key != "animation" {
-                return Err(
-                    "Unknown config key. Supported keys: animation".to_string(),
-                );
-            }
-
-            Ok(Command::SetAnimation(parse_bool(value)?))
+            Ok(Command::UpdateConfig(parse_config_update(key, value)?))
         }
         [_bin, ..] => Err(
-            "Usage: gut [config show] [--config show] [--config animation true|false]"
+            "Usage: gut [config show] [--config show] [--config animation true|false] [--config language en|ja]"
                 .to_string(),
         ),
         [] => Ok(Command::Run),
+    }
+}
+
+fn parse_config_update(key: &str, value: &str) -> Result<ConfigUpdate, String> {
+    match key {
+        "animation" => Ok(ConfigUpdate::Animation(parse_bool(value)?)),
+        "language" => Ok(ConfigUpdate::Language(Language::parse(value)?)),
+        _ => Err("Unknown config key. Supported keys: animation, language".to_string()),
     }
 }
 
@@ -145,23 +204,43 @@ fn parse_config(contents: &str) -> Config {
             continue;
         };
 
-        if key.trim() == "animation" {
-            config.animation = matches!(value.trim(), "true");
+        let value = value.trim();
+
+        match key.trim() {
+            "animation" => config.animation = matches!(value, "true"),
+            "language" => {
+                if let Ok(language) = Language::parse(value) {
+                    config.language = language;
+                }
+            }
+            _ => {}
         }
     }
 
     config
 }
 
-fn update_animation(enabled: bool) -> io::Result<(Config, PathBuf)> {
-    let config = Config { animation: enabled };
+fn update_config(update: ConfigUpdate) -> io::Result<(Config, PathBuf)> {
+    let mut config = load_config().unwrap_or_default();
+
+    match update {
+        ConfigUpdate::Animation(enabled) => config.animation = enabled,
+        ConfigUpdate::Language(language) => config.language = language,
+    }
+
     let path = config_path()?;
     let parent = path
         .parent()
         .ok_or_else(|| io::Error::other("Invalid config path"))?;
 
     fs::create_dir_all(parent)?;
-    fs::write(&path, format!("animation={enabled}\n"))?;
+    fs::write(
+        &path,
+        format!(
+            "animation={}\nlanguage={}\n",
+            config.animation, config.language
+        ),
+    )?;
 
     Ok((config, path))
 }
@@ -178,7 +257,10 @@ fn config_path() -> io::Result<PathBuf> {
 }
 
 fn format_config(config: Config) -> String {
-    format!("animation = {}\n", config.animation)
+    format!(
+        "animation = {}\nlanguage = {}\n",
+        config.animation, config.language
+    )
 }
 
 fn print_animated_goose(message: &str) {
@@ -246,7 +328,10 @@ fn render_spoken_frame(indent: usize, message: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_config, indent_text, parse_command, parse_config, render_spoken_frame, Command, Config};
+    use super::{
+        format_config, indent_text, parse_command, parse_config, render_spoken_frame, Command,
+        Config, ConfigUpdate, Language,
+    };
 
     #[test]
     fn parses_animation_config_command() {
@@ -258,7 +343,7 @@ mod tests {
         ])
         .unwrap();
 
-        assert_eq!(command, Command::SetAnimation(true));
+        assert_eq!(command, Command::UpdateConfig(ConfigUpdate::Animation(true)));
     }
 
     #[test]
@@ -270,17 +355,26 @@ mod tests {
     }
 
     #[test]
-    fn parses_animation_config_file() {
-        let config = parse_config("animation=true\n");
+    fn parses_language_from_config_file() {
+        let config = parse_config("animation=true\nlanguage=ja\n");
 
-        assert_eq!(config, Config { animation: true });
+        assert_eq!(
+            config,
+            Config {
+                animation: true,
+                language: Language::Ja,
+            }
+        );
     }
 
     #[test]
     fn formats_current_config() {
-        let output = format_config(Config { animation: true });
+        let output = format_config(Config {
+            animation: true,
+            language: Language::Ja,
+        });
 
-        assert_eq!(output, "animation = true\n");
+        assert_eq!(output, "animation = true\nlanguage = ja\n");
     }
 
     #[test]
