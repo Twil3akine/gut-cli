@@ -99,6 +99,22 @@ cargo install --path .
 cargo install gut-cli
 ```
 
+## Development
+
+If you use Nix, you can enter the development shell with:
+
+```bash
+nix develop
+```
+
+If you use `direnv`, this repository also includes a simple `.envrc`:
+
+```bash
+direnv allow
+```
+
+The shell provides `rustc`, `cargo`, `rustfmt`, `clippy`, and `rust-analyzer`.
+
 ## Run
 
 ```bash

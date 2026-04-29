@@ -7,21 +7,23 @@
 
   outputs = { nixpkgs, ... }:
     let
-      system = "aarch64-darwin";
+      systems = [ "aarch64-darwin" "x86_64-linux" ];
 
-      pkgs = import nixpkgs {
-        inherit system;
-      };
+      forAllSystems = f:
+        nixpkgs.lib.genAttrs systems (system:
+          f (import nixpkgs { inherit system; }));
     in
     {
-      devShells.${system}.default = pkgs.mkShell {
-        packages = [
-          pkgs.rustc
-          pkgs.cargo
-          pkgs.rustfmt
-          pkgs.clippy
-          pkgs.rust-analyzer
-        ];
-      };
+      devShells = forAllSystems (pkgs: {
+        default = pkgs.mkShell {
+          packages = [
+            pkgs.rustc
+            pkgs.cargo
+            pkgs.rustfmt
+            pkgs.clippy
+            pkgs.rust-analyzer
+          ];
+        };
+      });
     };
 }
