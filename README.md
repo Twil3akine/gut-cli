@@ -51,41 +51,39 @@ ___( o)>
 You can inspect the current settings:
 
 ```bash
-gut config show
-gut --config show
+gut show
 ```
 
 Animation is off by default, but you can enable a tiny entrance animation:
 
 ```bash
-gut --config animation true
+gut config animation true
 ```
 
 Disable it again with:
 
 ```bash
-gut --config animation false
+gut config animation false
 ```
 
 Switch the roast language:
 
 ```bash
-gut --config language en
-gut --config language ja
+gut config language en
+gut config language ja
 ```
 
 Switch the character:
 
 ```bash
-gut --config character goose
-gut --config character duck
-gut --config character owl
-gut --config character random
+gut config character goose
+gut config character duck
+gut config character owl
+gut config character random
 ```
 
 When `character=random`, `gut` picks `goose`, `duck`, or `owl` on each run.
 Message selection is randomized independently from character selection.
-
 
 ## Install
 

@@ -152,7 +152,7 @@ enum ConfigUpdate {
 #[derive(Debug, Eq, PartialEq)]
 enum Command {
     Run,
-    ShowConfig,
+    Show,
     UpdateConfig(ConfigUpdate),
 }
 
@@ -165,7 +165,7 @@ where
             run();
             ExitCode::SUCCESS
         }
-        Ok(Command::ShowConfig) => {
+        Ok(Command::Show) => {
             let config = load_config().unwrap_or_default();
             print!("{}", format_config(config));
             ExitCode::SUCCESS
@@ -190,19 +190,21 @@ where
 
 pub fn run() {
     let config = load_config().unwrap_or_default();
-    let base_seed = random_seed();
-    let message = choose_message(config.language, message_index(base_seed));
-    let character = config
-        .character
-        .resolve(character_index(base_seed))
-        .art();
+    let (character, message) = choose_character_and_message(config);
 
     if config.animation && io::stdout().is_terminal() {
-        print_animated_character(character, message);
+        print_animated_character(character.art(), message);
         return;
     }
 
-    println!("{}", render_spoken_frame(FINAL_INDENT, character, message));
+    println!("{}", render_spoken_frame(FINAL_INDENT, character.art(), message));
+}
+
+fn choose_character_and_message(config: Config) -> (Character, &'static str) {
+    let base_seed = random_seed();
+    let character = config.character.resolve(character_index(base_seed));
+    let message = choose_message(config.language, message_index(base_seed));
+    (character, message)
 }
 
 fn random_seed() -> usize {
@@ -246,17 +248,23 @@ where
 
     match collected.as_slice() {
         [_bin] => Ok(Command::Run),
-        [_bin, config, show] if config == "config" && show == "show" => Ok(Command::ShowConfig),
-        [_bin, flag, show] if flag == "--config" && show == "show" => Ok(Command::ShowConfig),
-        [_bin, flag, key, value] if flag == "--config" => {
+        [_bin, show] if show == "show" => Ok(Command::Show),
+        [_bin, config, show] if config == "config" && show == "show" => {
+            Err("Use `gut show` instead of `gut config show`.".to_string())
+        }
+        [_bin, config, key, value] if config == "config" => {
             Ok(Command::UpdateConfig(parse_config_update(key, value)?))
         }
-        [_bin, ..] => Err(
-            "Usage: gut [config show] [--config show] [--config animation true|false] [--config language en|ja] [--config character goose|duck|owl|random]"
-                .to_string(),
-        ),
+        [_bin, flag, ..] if flag == "--config" => {
+            Err("Use `gut config ...` instead of `gut --config ...`.".to_string())
+        }
+        [_bin, ..] => Err(usage().to_string()),
         [] => Ok(Command::Run),
     }
+}
+
+fn usage() -> &'static str {
+    "Usage: gut [show] [config animation true|false] [config language en|ja] [config character goose|duck|owl|random]"
 }
 
 fn parse_config_update(key: &str, value: &str) -> Result<ConfigUpdate, String> {
@@ -264,7 +272,9 @@ fn parse_config_update(key: &str, value: &str) -> Result<ConfigUpdate, String> {
         "animation" => Ok(ConfigUpdate::Animation(parse_bool(value)?)),
         "language" => Ok(ConfigUpdate::Language(Language::parse(value)?)),
         "character" => Ok(ConfigUpdate::Character(Character::parse(value)?)),
-        _ => Err("Unknown config key. Supported keys: animation, language, character".to_string()),
+        _ => Err(
+            "Unknown config key. Supported keys: animation, language, character".to_string(),
+        ),
     }
 }
 
@@ -371,24 +381,24 @@ fn print_animated_character(character: &str, message: &str) {
 
     for indent in ANIMATION_STEPS {
         let frame = indent_text(character, indent);
-        clear_previous_frame(&mut stdout, previous_lines);
-        let _ = writeln!(stdout, "{frame}");
-        let _ = stdout.flush();
-        previous_lines = count_lines(&frame);
+        draw_frame(&mut stdout, &mut previous_lines, &frame);
         thread::sleep(Duration::from_millis(FRAME_DELAY_MS));
     }
 
     let final_frame = indent_text(character, FINAL_INDENT);
-    clear_previous_frame(&mut stdout, previous_lines);
-    let _ = writeln!(stdout, "{final_frame}");
-    let _ = stdout.flush();
+    draw_frame(&mut stdout, &mut previous_lines, &final_frame);
     thread::sleep(Duration::from_millis(FRAME_DELAY_MS));
 
-    clear_previous_frame(&mut stdout, count_lines(&final_frame));
     let spoken_frame = render_spoken_frame(FINAL_INDENT, character, message);
-    let _ = writeln!(stdout, "{spoken_frame}");
-    let _ = stdout.flush();
+    draw_frame(&mut stdout, &mut previous_lines, &spoken_frame);
     thread::sleep(Duration::from_millis(FINAL_HOLD_MS));
+}
+
+fn draw_frame(stdout: &mut impl Write, previous_lines: &mut usize, frame: &str) {
+    clear_previous_frame(stdout, *previous_lines);
+    let _ = writeln!(stdout, "{frame}");
+    let _ = stdout.flush();
+    *previous_lines = count_lines(frame);
 }
 
 fn clear_previous_frame(stdout: &mut impl Write, line_count: usize) {
@@ -442,10 +452,10 @@ mod tests {
     };
 
     #[test]
-    fn parses_animation_config_command() {
+    fn parses_config_subcommand() {
         let command = parse_command([
             "gut".to_string(),
-            "--config".to_string(),
+            "config".to_string(),
             "animation".to_string(),
             "true".to_string(),
         ])
@@ -458,11 +468,32 @@ mod tests {
     }
 
     #[test]
-    fn parses_show_config_command() {
-        let command =
-            parse_command(["gut".to_string(), "config".to_string(), "show".to_string()]).unwrap();
+    fn parses_show_subcommand() {
+        let command = parse_command(["gut".to_string(), "show".to_string()]).unwrap();
 
-        assert_eq!(command, Command::ShowConfig);
+        assert_eq!(command, Command::Show);
+    }
+
+    #[test]
+    fn rejects_legacy_config_forms() {
+        let error = parse_command([
+            "gut".to_string(),
+            "--config".to_string(),
+            "animation".to_string(),
+            "true".to_string(),
+        ])
+        .unwrap_err();
+
+        assert!(error.contains("gut config"));
+    }
+
+    #[test]
+    fn rejects_legacy_config_show() {
+        let error =
+            parse_command(["gut".to_string(), "config".to_string(), "show".to_string()])
+                .unwrap_err();
+
+        assert!(error.contains("gut show"));
     }
 
     #[test]
