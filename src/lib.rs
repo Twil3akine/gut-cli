@@ -14,22 +14,42 @@ const FINAL_INDENT: usize = 3;
 const MESSAGE_SALT: u64 = 0x9E37_79B9_7F4A_7C15;
 const CHARACTER_SALT: u64 = 0xBF58_476D_1CE4_E5B9;
 
-const EN_MESSAGES: [&str; 6] = [
+const EN_MESSAGES: [&str; 16] = [
     "You meant `git`, didn't you? Bold typo.",
     "Cute try. Still looks a lot like `git` was the plan.",
     "That honk was suspiciously close to `git`.",
     "You typed `gut`. Your fingers clearly wanted `git`.",
     "Confidently wrong. Were you aiming for `git`?",
     "Impressive. You missed `git` by one letter.",
+    "That was almost `git`, if we lower the standards enough.",
+    "A typo this committed deserves a witness.",
+    "You typed `gut` like you had a plan. Fascinating.",
+    "One letter off, full consequences.",
+    "You were within typo distance of `git` and still missed.",
+    "That command had strong `git` energy and weak execution.",
+    "You summoned a bird instead of version control.",
+    "This is what happens when `git` leaves the runway.",
+    "Close to `git`, far from success.",
+    "A brave attempt at `git`. Not a correct one.",
 ];
 
-const JA_MESSAGES: [&str; 6] = [
+const JA_MESSAGES: [&str; 16] = [
     "`git` のつもりでしたよね。堂々と `gut` ですね。",
     "惜しいです。かなり `git` のつもりだった気配があります。",
     "そのガァガァ、かなり `git` に近いです。",
     "`gut` を打ちましたが、指は `git` を目指していた気がします。",
     "自信はありますが、たぶん `git` ではないです。",
     "`git` を 1 文字で外しました。印象には残ります。",
+    "かなり `git` っぽいですが、残念ながら goose 側です。",
+    "その typo、勢いだけは十分です。",
+    "`git` に届きそうで届かない感じが見事です。",
+    "1 文字違いでここまで雰囲気が変わるんですね。",
+    "その入力、かなり鳥寄りです。",
+    "惜しいですが、バージョン管理ではなく野鳥観察になっています。",
+    "`git` のつもりで `gut` を出す手つき、だいぶ板についています。",
+    "近いです。ただし正解ではありません。",
+    "そのコマンド、強い意志と弱い精度を感じます。",
+    "ほぼ `git` ですが、ちゃんと `gut` です。",
 ];
 
 const GOOSE: &str = r#"   _
